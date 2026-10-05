@@ -1,0 +1,5 @@
+/target
+venv/
+iot.db
+certs/*.key
+cert/*.key

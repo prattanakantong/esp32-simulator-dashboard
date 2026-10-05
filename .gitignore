@@ -1,0 +1,8 @@
+venv/
+backend/target/
+iot.db
+backend/iot.db
+certs/*.key
+certs/*.srl
+cert/
+__pycache__/

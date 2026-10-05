@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <title>IoT Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4"></script>
+    <style>
+      body {
+        font-family: sans-serif;
+        max-width: 900px;
+        margin: 2rem auto;
+      }
+      select {
+        margin-bottom: 1rem;
+        padding: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Sensor Dashboard</h2>
+    <select id="device"></select>
+    <canvas id="chart" height="120"></canvas>
+
+    <script>
+      const sel = document.getElementById("device");
+      const chart = new Chart(document.getElementById("chart"), {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "Temp (°C)",
+              data: [],
+              borderColor: "#e4572e",
+              tension: 0.2,
+            },
+            {
+              label: "Humidity (%)",
+              data: [],
+              borderColor: "#2e86e4",
+              tension: 0.2,
+            },
+          ],
+        },
+        options: { animation: false },
+      });
+
+      async function loadDevices() {
+        const devs = await (await fetch("/api/devices")).json();
+        sel.innerHTML = devs.map((d) => `<option>${d}</option>`).join("");
+      }
+
+      async function refresh() {
+        if (!sel.value) return;
+        const rows = await (
+          await fetch(`/api/readings?device=${sel.value}&minutes=60`)
+        ).json();
+        chart.data.labels = rows.map((r) =>
+          new Date(r.ts * 1000).toLocaleTimeString(),
+        );
+        chart.data.datasets[0].data = rows.map((r) => r.temp);
+        chart.data.datasets[1].data = rows.map((r) => r.hum);
+        chart.update();
+      }
+
+      loadDevices().then(refresh);
+      setInterval(loadDevices, 15000);
+      setInterval(refresh, 5000);
+      sel.onchange = refresh;
+    </script>
+  </body>
+</html>
