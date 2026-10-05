@@ -8,11 +8,17 @@ import paho.mqtt.client as mqtt
 
 DEVICE_ID = sys.argv[1] if len(sys.argv) > 1 else "sim-01"
 MQTT_HOST = "localhost"
-MQTT_PORT = 1883
-INTERVAL = 5  # วินาที
+MQTT_PORT = 8883
+INTERVAL = 2
 TOPIC = f"devices/{DEVICE_ID}/telemetry"
+CERT_DIR = "certs"
 
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=DEVICE_ID)
+client.tls_set(
+    ca_certs=f"{CERT_DIR}/ca.crt",
+    certfile=f"{CERT_DIR}/{DEVICE_ID}.crt",
+    keyfile=f"{CERT_DIR}/{DEVICE_ID}.key",
+)
 client.connect(MQTT_HOST, MQTT_PORT)
 client.loop_start()
 

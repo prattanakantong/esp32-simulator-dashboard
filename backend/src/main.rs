@@ -9,6 +9,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use rumqttc::{TlsConfiguration, Transport};
 use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -63,8 +64,17 @@ fn init_db() -> Connection {
 
 // ---------- ฝั่ง MQTT: subscriber ----------
 async fn mqtt_ingest(db: Db) {
-    let mut opts = MqttOptions::new("ingestor", "localhost", 1883);
+    let ca = std::fs::read("../certs/ca.crt").expect("อ่าน ca.crt ไม่ได้");
+    let cert = std::fs::read("../certs/ingestor.crt").expect("อ่าน ingestor.crt ไม่ได้");
+    let key = std::fs::read("../certs/ingestor.key").expect("อ่าน ingestor.key ไม่ได้");
+
+    let mut opts = MqttOptions::new("ingestor", "localhost", 8883);
     opts.set_keep_alive(Duration::from_secs(10));
+    opts.set_transport(Transport::Tls(TlsConfiguration::Simple {
+        ca,
+        alpn: None,
+        client_auth: Some((cert, key)),
+    }));
     let (client, mut eventloop) = AsyncClient::new(opts, 10);
 
     loop {

@@ -6,3 +6,7 @@ certs/*.key
 certs/*.srl
 cert/
 __pycache__/
+
+certs/index.txt*
+certs/crlnumber*
+certs/*.old
