@@ -10,3 +10,5 @@ __pycache__/
 certs/index.txt*
 certs/crlnumber*
 certs/*.old
+
+mosquitto/mosquitto.conf
