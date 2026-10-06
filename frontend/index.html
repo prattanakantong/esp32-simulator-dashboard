@@ -1,72 +1,1350 @@
 <!doctype html>
-<html lang="th">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>IoT Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sensor Monitor</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4"></script>
     <style>
-      body {
-        font-family: sans-serif;
-        max-width: 900px;
-        margin: 2rem auto;
+      :root {
+        color-scheme: dark;
+        --bg: #0e1420;
+        --panel: #141c2b;
+        --raised: #1b2538;
+        --line: #25314a;
+        --text: #e7ecf6;
+        --muted: #8c98b0;
+        --temp: #f4a259;
+        --hum: #5bc0de;
+        --ok: #5fd0a5;
+        --bad: #ee6c7b;
       }
-      select {
-        margin-bottom: 1rem;
-        padding: 4px;
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          "Noto Sans Thai",
+          "Leelawadee UI",
+          Tahoma,
+          sans-serif;
+        line-height: 1.5;
+      }
+
+      button {
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+      }
+      button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--hum);
+        outline-offset: 2px;
+      }
+
+      .app {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 20px 20px 32px;
+      }
+
+      /* ---------- header ---------- */
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .top h1 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 650;
+        letter-spacing: -0.01em;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        padding: 6px 14px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        font-size: 0.875rem;
+        color: var(--muted);
+      }
+      .status .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+      .status.live {
+        color: var(--text);
+      }
+      .status.live .dot {
+        background: var(--ok);
+        animation: pulse 2s ease-out infinite;
+      }
+      .status.warn {
+        color: var(--text);
+      }
+      .status.warn .dot {
+        background: var(--temp);
+      }
+      .status.bad {
+        color: #ffc9cf;
+        border-color: #5a2c38;
+      }
+      .status.bad .dot {
+        background: var(--bad);
+      }
+
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(95, 208, 165, 0.55);
+        }
+        100% {
+          box-shadow: 0 0 0 8px rgba(95, 208, 165, 0);
+        }
+      }
+
+      /* ---------- layout ---------- */
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 380px;
+        gap: 16px;
+        margin-top: 16px;
+        align-items: start;
+      }
+
+      .board {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 18px 20px 16px;
+      }
+
+      /* ---------- fleet overview ---------- */
+      .fleet {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        gap: 8px;
+      }
+      .fleet-empty {
+        grid-column: 1 / -1;
+        color: var(--muted);
+        padding: 14px;
+        border: 1px dashed var(--line);
+        border-radius: 10px;
+      }
+
+      .dev {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        text-align: left;
+        background: transparent;
+        border: 1px solid var(--line);
+        border-left-width: 3px;
+        border-radius: 10px;
+        padding: 10px 12px;
+      }
+      .dev:hover {
+        border-color: #3a4b6e;
+      }
+      .dev[aria-pressed="true"] {
+        background: var(--raised);
+        border-color: #4b5f88;
+      }
+      .dev.off {
+        border-style: dashed;
+      }
+      .dev.alert {
+        border-left-color: var(--temp);
+      }
+
+      .dev-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+      }
+      .dev-name {
+        font-weight: 600;
+      }
+      .dev-state {
+        display: inline-flex;
+        align-items: center;
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+      .dev-state::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--ok);
+        margin-right: 6px;
+      }
+      .dev.off .dev-state::before {
+        background: var(--bad);
+      }
+
+      .dev-vals {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        font-variant-numeric: tabular-nums;
+      }
+      .dev-t {
+        color: var(--temp);
+        font-size: 1.1rem;
+        font-weight: 600;
+      }
+      .dev-h {
+        color: var(--hum);
+        font-size: 0.9rem;
+      }
+      .dev-flag {
+        margin-left: auto;
+        font-size: 0.75rem;
+        color: var(--temp);
+      }
+      .dev.off .dev-vals,
+      .dev.off .spark {
+        opacity: 0.55;
+      }
+
+      .spark {
+        display: block;
+        width: 100%;
+        height: 32px;
+      }
+      .spark path {
+        fill: none;
+        stroke: var(--temp);
+        stroke-width: 1.5;
+        vector-effect: non-scaling-stroke;
+      }
+
+      /* ---------- controls ---------- */
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-top: 20px;
+      }
+      .sel {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 600;
+      }
+
+      .seg {
+        display: inline-flex;
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 3px;
+      }
+      .seg button {
+        background: transparent;
+        border: 0;
+        border-radius: 6px;
+        padding: 5px 12px;
+        color: var(--muted);
+      }
+      .seg button:hover {
+        color: var(--text);
+      }
+      .seg button.on {
+        background: var(--raised);
+        color: var(--text);
+      }
+
+      /* ---------- readouts ---------- */
+      .readouts {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin: 16px 0 8px;
+        row-gap: 16px;
+      }
+      .readouts > div {
+        padding: 0 16px;
+        border-left: 1px solid var(--line);
+      }
+      .readouts > div:first-child {
+        padding-left: 0;
+        border-left: 0;
+      }
+      .k {
+        display: block;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .v {
+        display: block;
+        font-size: 1.75rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.25;
+      }
+      .v .u {
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: var(--muted);
+        margin-left: 3px;
+      }
+      #vTemp {
+        color: var(--temp);
+      }
+      #vHum {
+        color: var(--hum);
+      }
+
+      /* ---------- chart ---------- */
+      .chartbox {
+        position: relative;
+        height: 340px;
+        margin-top: 8px;
+      }
+      .empty {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        color: var(--muted);
+        padding: 0 24px;
+      }
+      .empty[hidden] {
+        display: none;
+      }
+
+      /* ---------- events ---------- */
+      .events {
+        margin-top: 18px;
+        border-top: 1px solid var(--line);
+        padding-top: 14px;
+      }
+      .events h3 {
+        margin: 0 0 6px;
+        font-size: 0.95rem;
+        font-weight: 600;
+      }
+      .ev-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: 224px;
+        overflow-y: auto;
+      }
+      .ev-list li {
+        display: grid;
+        grid-template-columns: 12px 72px minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        padding: 7px 0;
+        border-bottom: 1px solid #1c273b;
+        font-size: 0.88rem;
+      }
+      .ev-list li.ev-empty {
+        display: block;
+        color: var(--muted);
+        border-bottom: 0;
+      }
+      .ev-time {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .ev-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+      }
+      .ev-dot.spike {
+        border: 2px solid var(--temp);
+        background: var(--bg);
+      }
+      .ev-dot.offline {
+        background: var(--bad);
+      }
+      .ev-dot.online {
+        background: var(--ok);
+      }
+      .ev-dot.new {
+        background: var(--hum);
+      }
+
+      .foot {
+        color: var(--muted);
+        font-size: 0.8rem;
+        margin: 12px 0 0;
+        max-width: 78ch;
+      }
+      .events + .foot {
+        margin-top: 16px;
+      }
+      .foot + .foot {
+        margin-top: 2px;
+      }
+
+      /* ---------- chat ---------- */
+      .chat {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 96px);
+        min-height: 480px;
+        position: sticky;
+        top: 16px;
+        overflow: hidden;
+      }
+      .chat-head {
+        padding: 16px 18px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .chat-head h2 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+      .chat-head p {
+        margin: 2px 0 0;
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+
+      .log {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .msg {
+        max-width: 88%;
+        padding: 9px 13px;
+        border-radius: 12px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .msg.user {
+        align-self: flex-end;
+        background: #243452;
+      }
+      .msg.bot {
+        align-self: flex-start;
+        background: var(--raised);
+      }
+      .msg.err {
+        align-self: flex-start;
+        background: #2a1a22;
+        border: 1px solid #5a2c38;
+        color: #ffc9cf;
+      }
+
+      .dots span {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        margin: 0 2px;
+        border-radius: 50%;
+        background: var(--muted);
+        animation: blink 1.2s infinite;
+      }
+      .dots span:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+      .dots span:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+      @keyframes blink {
+        0%,
+        80%,
+        100% {
+          opacity: 0.25;
+        }
+        40% {
+          opacity: 1;
+        }
+      }
+
+      .sugg {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 0 16px 10px;
+      }
+      .sugg[hidden] {
+        display: none;
+      }
+      .sugg button {
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        padding: 5px 11px;
+        text-align: left;
+      }
+      .sugg button:hover {
+        color: var(--text);
+        border-color: #3a4b6e;
+      }
+
+      .form {
+        display: flex;
+        gap: 8px;
+        padding: 12px;
+        border-top: 1px solid var(--line);
+      }
+      .form input {
+        flex: 1;
+        min-width: 0;
+        background: var(--bg);
+        border: 1px solid var(--line);
+        color: var(--text);
+        padding: 10px 12px;
+        border-radius: 10px;
+        font: inherit;
+      }
+      .form input::placeholder {
+        color: #667290;
+      }
+      .form button {
+        background: var(--hum);
+        color: #0b1220;
+        border: 0;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        width: 44px;
+        padding: 0;
+      }
+      .form button:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      /* ---------- responsive ---------- */
+      @media (max-width: 1000px) {
+        .grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .chat {
+          position: static;
+          height: 520px;
+        }
+      }
+      @media (max-width: 640px) {
+        .app {
+          padding: 14px 12px 24px;
+        }
+        .readouts {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .readouts > div:nth-child(odd) {
+          padding-left: 0;
+          border-left: 0;
+        }
+        .chartbox {
+          height: 280px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+        }
       }
     </style>
   </head>
   <body>
-    <h2>Sensor Dashboard</h2>
-    <select id="device"></select>
-    <canvas id="chart" height="120"></canvas>
+    <div class="app">
+      <header class="top">
+        <h1>Sensor Monitor</h1>
+        <div class="status" id="conn" role="status">
+          <span class="dot"></span><span id="connText">Connecting</span>
+        </div>
+      </header>
+
+      <main class="grid">
+        <section class="board" aria-label="Sensor data">
+          <div class="fleet" id="fleet" aria-label="Devices"></div>
+
+          <div class="controls">
+            <h2 class="sel" id="selName">No device selected</h2>
+            <div class="seg" id="range" role="group" aria-label="Time range">
+              <button type="button" data-m="15">15 min</button>
+              <button type="button" data-m="60" class="on">1 h</button>
+              <button type="button" data-m="360">6 h</button>
+            </div>
+          </div>
+
+          <div class="readouts">
+            <div>
+              <span class="k">Temperature</span
+              ><span class="v" id="vTemp">—</span>
+            </div>
+            <div>
+              <span class="k">Humidity</span><span class="v" id="vHum">—</span>
+            </div>
+            <div>
+              <span class="k">Temperature range</span
+              ><span class="v" id="vRange">—</span>
+            </div>
+            <div>
+              <span class="k">Anomalies in range</span
+              ><span class="v" id="vSpike">—</span>
+            </div>
+          </div>
+
+          <div class="chartbox">
+            <canvas
+              id="chart"
+              aria-label="Temperature and humidity chart"
+            ></canvas>
+            <div class="empty" id="empty" hidden></div>
+          </div>
+
+          <div class="events">
+            <h3>Recent events</h3>
+            <ul class="ev-list" id="events"></ul>
+          </div>
+
+          <p class="foot">
+            An anomaly is a temperature more than 5 °C away from the median of
+            the window it is measured in: the selected range on the chart, and
+            the last 15 minutes on device cards and in the event list. Anomalies
+            are marked with a ring.
+          </p>
+          <p class="foot">
+            Events are rebuilt from the last 15 minutes of data when the page
+            loads. They are not stored.
+          </p>
+          <p class="foot">
+            All data comes from devices that authenticate with a certificate
+            (mTLS).
+          </p>
+        </section>
+
+        <aside class="chat" aria-label="AI assistant">
+          <div class="chat-head">
+            <h2>AI assistant</h2>
+            <p>Read-only. It cannot control devices.</p>
+          </div>
+          <div class="log" id="log" role="log" aria-live="polite"></div>
+          <div class="sugg" id="sugg"></div>
+          <div class="form">
+            <input
+              id="input"
+              maxlength="1000"
+              placeholder="Ask a question"
+              autocomplete="off"
+              aria-label="Question"
+            />
+            <button type="button" id="send" aria-label="Send" title="Send">
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M22 2 11 13" />
+                <path d="m22 2-7 20-4-9-9-4Z" />
+              </svg>
+            </button>
+          </div>
+        </aside>
+      </main>
+    </div>
 
     <script>
-      const sel = document.getElementById("device");
-      const chart = new Chart(document.getElementById("chart"), {
+      const $ = (id) => document.getElementById(id);
+      const NS = "http://www.w3.org/2000/svg";
+      const TEMP = "#f4a259",
+        HUM = "#5bc0de",
+        BG = "#0e1420";
+      const SPIKE = 5; // degrees away from the median that count as an anomaly
+      const MAX_POINTS = 500; // max points drawn on the main chart
+      const LIVE_SECONDS = 15; // older than this means the device is not reporting
+      const FLEET_MINUTES = 15; // window used by device cards and the event list
+      const SPARK_POINTS = 60;
+      const MAX_EVENTS = 50;
+
+      const state = {
+        device: null,
+        minutes: 60,
+        devices: [],
+        live: {}, // device -> was live on the previous check
+        known: new Set(), // devices already seen
+        ready: false, // true after the first fleet load
+      };
+      const cards = new Map(); // device -> card elements
+      const seen = new Set(); // event keys, to avoid duplicates
+      const lastSpike = {}; // device -> timestamp of last spike event
+      let events = [];
+
+      // ---------- chart ----------
+      Chart.defaults.color = "#8c98b0";
+      Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+      Chart.defaults.borderColor = "#25314a";
+
+      function fillGradient(color) {
+        return (context) => {
+          const area = context.chart.chartArea;
+          if (!area) return "transparent";
+          const g = context.chart.ctx.createLinearGradient(
+            0,
+            area.top,
+            0,
+            area.bottom,
+          );
+          g.addColorStop(0, color + "33");
+          g.addColorStop(1, color + "00");
+          return g;
+        };
+      }
+
+      const chart = new Chart($("chart"), {
         type: "line",
         data: {
           labels: [],
           datasets: [
             {
-              label: "Temp (°C)",
+              label: "Temperature (°C)",
               data: [],
-              borderColor: "#e4572e",
-              tension: 0.2,
+              yAxisID: "yT",
+              borderColor: TEMP,
+              backgroundColor: fillGradient(TEMP),
+              fill: true,
+              borderWidth: 2,
+              tension: 0.3,
+              pointRadius: [],
+              pointHitRadius: 8,
+              pointBackgroundColor: BG,
+              pointBorderColor: TEMP,
+              pointBorderWidth: 2,
             },
             {
               label: "Humidity (%)",
               data: [],
-              borderColor: "#2e86e4",
-              tension: 0.2,
+              yAxisID: "yH",
+              borderColor: HUM,
+              borderWidth: 1.5,
+              tension: 0.3,
+              pointRadius: 0,
+              pointHitRadius: 8,
             },
           ],
         },
-        options: { animation: false },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: "#1b2538",
+              borderColor: "#25314a",
+              borderWidth: 1,
+              padding: 10,
+              titleColor: "#e7ecf6",
+              bodyColor: "#e7ecf6",
+            },
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { maxTicksLimit: 6, maxRotation: 0 },
+            },
+            yT: {
+              position: "left",
+              ticks: { color: TEMP, callback: (v) => v + "°" },
+              grid: { color: "#1f2a40" },
+            },
+            yH: {
+              position: "right",
+              ticks: { color: HUM, callback: (v) => v + "%" },
+              grid: { drawOnChartArea: false },
+            },
+          },
+        },
       });
 
-      async function loadDevices() {
-        const devs = await (await fetch("/api/devices")).json();
-        sel.innerHTML = devs.map((d) => `<option>${d}</option>`).join("");
+      // ---------- helpers ----------
+      function setVal(id, text, unit) {
+        const el = $(id);
+        el.textContent = text;
+        if (unit) {
+          const u = document.createElement("span");
+          u.className = "u";
+          u.textContent = unit;
+          el.appendChild(u);
+        }
+      }
+
+      function fmtTime(ts) {
+        return new Date(ts * 1000).toLocaleTimeString("en-GB", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        });
+      }
+
+      function fmtAge(sec) {
+        if (sec < 60) return Math.round(sec) + " s";
+        if (sec < 3600) return Math.floor(sec / 60) + " min";
+        return Math.floor(sec / 3600) + " h";
+      }
+
+      function rangeLabel() {
+        return {
+          15: "the last 15 minutes",
+          60: "the last hour",
+          360: "the last 6 hours",
+        }[state.minutes];
+      }
+
+      function setConn(kind, text) {
+        $("conn").className = "status " + kind;
+        $("connText").textContent = text;
+      }
+
+      function showEmpty(text) {
+        const el = $("empty");
+        el.textContent = text || "";
+        el.hidden = !text;
+      }
+
+      function median(values) {
+        const s = [...values].sort((a, b) => a - b);
+        return s[Math.floor(s.length / 2)];
+      }
+
+      // temps, median and the indexes of readings far from the median
+      function analyze(rows) {
+        const temps = rows.map((r) => r.temp);
+        const med = median(temps);
+        const flagged = [];
+        rows.forEach((r, i) => {
+          if (Math.abs(r.temp - med) > SPIKE) flagged.push(i);
+        });
+        return { temps, med, flagged };
+      }
+
+      // ---------- main chart ----------
+      function clearChart() {
+        chart.data.labels = [];
+        chart.data.datasets.forEach((d) => {
+          d.data = [];
+        });
+        chart.data.datasets[0].pointRadius = [];
+        chart.update();
+        setVal("vTemp", "—");
+        setVal("vHum", "—");
+        setVal("vRange", "—");
+        setVal("vSpike", "—");
+      }
+
+      function draw(rows) {
+        if (rows.length === 0) {
+          clearChart();
+          showEmpty("No readings in " + rangeLabel());
+          return;
+        }
+        showEmpty("");
+
+        const { temps, flagged } = analyze(rows);
+        const isFlag = new Set(flagged);
+
+        // draw fewer points on long ranges, but always keep anomalies
+        const step = Math.max(1, Math.ceil(rows.length / MAX_POINTS));
+        const keep = rows.map((_, i) => i % step === 0 || isFlag.has(i));
+        const shown = rows.filter((_, i) => keep[i]);
+        const shownFlags = rows
+          .map((_, i) => isFlag.has(i))
+          .filter((_, i) => keep[i]);
+
+        chart.data.labels = shown.map((r) => fmtTime(r.ts));
+        chart.data.datasets[0].data = shown.map((r) => r.temp);
+        chart.data.datasets[0].pointRadius = shownFlags.map((f) => (f ? 5 : 0));
+        chart.data.datasets[1].data = shown.map((r) => r.hum);
+        chart.update();
+
+        const last = rows[rows.length - 1];
+        const min = temps.reduce((a, b) => Math.min(a, b), Infinity);
+        const max = temps.reduce((a, b) => Math.max(a, b), -Infinity);
+        setVal("vTemp", last.temp.toFixed(1), "°C");
+        setVal("vHum", last.hum.toFixed(1), "%");
+        setVal("vRange", min.toFixed(1) + " – " + max.toFixed(1), "°C");
+        const n = flagged.length;
+        setVal(
+          "vSpike",
+          n === 0 ? "None" : n + (n === 1 ? " reading" : " readings"),
+        );
       }
 
       async function refresh() {
-        if (!sel.value) return;
-        const rows = await (
-          await fetch(`/api/readings?device=${sel.value}&minutes=60`)
-        ).json();
-        chart.data.labels = rows.map((r) =>
-          new Date(r.ts * 1000).toLocaleTimeString(),
-        );
-        chart.data.datasets[0].data = rows.map((r) => r.temp);
-        chart.data.datasets[1].data = rows.map((r) => r.hum);
-        chart.update();
+        if (!state.device) {
+          clearChart();
+          showEmpty(
+            "No device has reported data yet. Start the simulator and wait a moment.",
+          );
+          return;
+        }
+        const wanted = state.device + "|" + state.minutes;
+        try {
+          const res = await fetch(
+            "/api/readings?device=" +
+              encodeURIComponent(state.device) +
+              "&minutes=" +
+              state.minutes,
+          );
+          const rows = await res.json();
+          if (wanted !== state.device + "|" + state.minutes) return; // selection changed while waiting
+          draw(rows);
+        } catch (e) {
+          setConn("bad", "Cannot reach the backend");
+        }
       }
 
-      loadDevices().then(refresh);
-      setInterval(loadDevices, 15000);
-      setInterval(refresh, 5000);
-      sel.onchange = refresh;
+      // ---------- fleet overview ----------
+      function sparkPath(values) {
+        if (values.length < 2) return "";
+        const w = 120,
+          h = 32;
+        const min = values.reduce((a, b) => Math.min(a, b), Infinity);
+        const max = values.reduce((a, b) => Math.max(a, b), -Infinity);
+        const span = Math.max(max - min, 6); // keep normal noise from looking like big swings
+        return (
+          "M" +
+          values
+            .map((v, i) => {
+              const x = (i / (values.length - 1)) * w;
+              const y = h - 2 - ((v - min) / span) * (h - 4);
+              return x.toFixed(1) + "," + y.toFixed(1);
+            })
+            .join(" L")
+        );
+      }
+
+      function makeCard(id) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "dev";
+
+        const top = document.createElement("span");
+        top.className = "dev-top";
+        const name = document.createElement("span");
+        name.className = "dev-name";
+        name.textContent = id;
+        const st = document.createElement("span");
+        st.className = "dev-state";
+        top.append(name, st);
+
+        const vals = document.createElement("span");
+        vals.className = "dev-vals";
+        const t = document.createElement("span");
+        t.className = "dev-t";
+        const h = document.createElement("span");
+        h.className = "dev-h";
+        const flag = document.createElement("span");
+        flag.className = "dev-flag";
+        vals.append(t, h, flag);
+
+        const svg = document.createElementNS(NS, "svg");
+        svg.setAttribute("class", "spark");
+        svg.setAttribute("viewBox", "0 0 120 32");
+        svg.setAttribute("preserveAspectRatio", "none");
+        svg.setAttribute("aria-hidden", "true");
+        const path = document.createElementNS(NS, "path");
+        svg.appendChild(path);
+
+        btn.append(top, vals, svg);
+        btn.onclick = () => {
+          state.device = id;
+          syncSelection();
+          renderSuggestions();
+          refresh();
+        };
+        return { btn, st, t, h, flag, path };
+      }
+
+      function updateCard(card, info, live, age) {
+        card.btn.classList.toggle("off", !live);
+        card.btn.classList.toggle("alert", !!info && info.flagged.length > 0);
+        card.flag.textContent =
+          info && info.flagged.length > 0 ? "Anomaly" : "";
+
+        if (!info) {
+          card.st.textContent = "No data in " + FLEET_MINUTES + " min";
+          card.t.textContent = "—";
+          card.h.textContent = "";
+          card.path.setAttribute("d", "");
+          return;
+        }
+        card.st.textContent = live ? "Live" : "No data for " + fmtAge(age);
+        card.t.textContent = info.last.temp.toFixed(1) + " °C";
+        card.h.textContent = info.last.hum.toFixed(0) + " %";
+
+        const step = Math.max(1, Math.ceil(info.temps.length / SPARK_POINTS));
+        const pts = info.temps.filter(
+          (_, i) => i % step === 0 || i === info.temps.length - 1,
+        );
+        card.path.setAttribute("d", sparkPath(pts));
+      }
+
+      function syncSelection() {
+        cards.forEach((c, id) =>
+          c.btn.setAttribute("aria-pressed", String(id === state.device)),
+        );
+        $("selName").textContent = state.device || "No device selected";
+      }
+
+      function renderFleet(infoById) {
+        const box = $("fleet");
+
+        // remove cards of devices that no longer exist
+        cards.forEach((c, id) => {
+          if (!state.devices.includes(id)) {
+            c.btn.remove();
+            cards.delete(id);
+          }
+        });
+
+        if (state.devices.length === 0) {
+          if (!box.querySelector(".fleet-empty")) {
+            const p = document.createElement("p");
+            p.className = "fleet-empty";
+            p.textContent =
+              "No device has reported data yet. Start the simulator and wait a moment.";
+            box.appendChild(p);
+          }
+          return;
+        }
+        const placeholder = box.querySelector(".fleet-empty");
+        if (placeholder) placeholder.remove();
+
+        // update cards in place so keyboard focus is not lost on refresh
+        state.devices.forEach((id) => {
+          let card = cards.get(id);
+          if (!card) {
+            card = makeCard(id);
+            cards.set(id, card);
+            box.appendChild(card.btn);
+          }
+          const entry = infoById[id];
+          if (entry) updateCard(card, entry.info, entry.live, entry.age);
+        });
+        syncSelection();
+      }
+
+      // ---------- events ----------
+      function pushEvent(ev) {
+        events.push(ev);
+      }
+
+      function renderEvents() {
+        const list = $("events");
+        list.replaceChildren();
+        if (events.length === 0) {
+          const li = document.createElement("li");
+          li.className = "ev-empty";
+          li.textContent =
+            "No events yet. Anomalies, outages and new devices will show up here.";
+          list.appendChild(li);
+          return;
+        }
+        events.forEach((ev) => {
+          const li = document.createElement("li");
+          const dot = document.createElement("span");
+          dot.className = "ev-dot " + ev.kind;
+          const time = document.createElement("span");
+          time.className = "ev-time";
+          time.textContent = fmtTime(ev.t);
+          const text = document.createElement("span");
+          text.textContent = ev.text;
+          li.append(dot, time, text);
+          list.appendChild(li);
+        });
+      }
+
+      function processFleet(entries) {
+        const now = Date.now() / 1000;
+        const infoById = {};
+        let changed = false;
+
+        entries.forEach(([id, rows]) => {
+          let info = null;
+          if (rows.length > 0) {
+            info = analyze(rows);
+            info.last = rows[rows.length - 1];
+          }
+          const age = info ? now - info.last.ts : Infinity;
+          const live = age <= LIVE_SECONDS;
+          infoById[id] = { info, live, age };
+
+          // anomaly events (each reading is reported once; bursts within 10 s count as one)
+          if (info) {
+            info.flagged.forEach((idx) => {
+              const r = rows[idx];
+              const key = "spike|" + id + "|" + r.ts;
+              if (seen.has(key)) return;
+              seen.add(key);
+              if (
+                lastSpike[id] !== undefined &&
+                Math.abs(r.ts - lastSpike[id]) < 10
+              )
+                return;
+              lastSpike[id] = r.ts;
+              const diff = r.temp - info.med;
+              pushEvent({
+                t: r.ts,
+                kind: "spike",
+                text:
+                  id +
+                  ": temperature " +
+                  r.temp.toFixed(1) +
+                  " °C, " +
+                  Math.abs(diff).toFixed(1) +
+                  " °C " +
+                  (diff > 0 ? "above" : "below") +
+                  " the recent median",
+              });
+              changed = true;
+            });
+          }
+
+          // online / offline transitions
+          const prev = state.live[id];
+          if (prev === undefined && !live) {
+            pushEvent({
+              t: now,
+              kind: "offline",
+              text: info
+                ? id + " is not reporting (last data " + fmtAge(age) + " ago)"
+                : id + " has no data in the last " + FLEET_MINUTES + " minutes",
+            });
+            changed = true;
+          } else if (prev === true && !live) {
+            pushEvent({
+              t: now,
+              kind: "offline",
+              text:
+                id + " stopped reporting (last data " + fmtAge(age) + " ago)",
+            });
+            changed = true;
+          } else if (prev === false && live) {
+            pushEvent({
+              t: now,
+              kind: "online",
+              text: id + " is reporting again",
+            });
+            changed = true;
+          }
+          state.live[id] = live;
+
+          // new device after the first load
+          if (state.ready && !state.known.has(id)) {
+            pushEvent({ t: now, kind: "new", text: id + " started reporting" });
+            changed = true;
+          }
+          state.known.add(id);
+        });
+
+        if (changed) {
+          events.sort((a, b) => b.t - a.t);
+          if (events.length > MAX_EVENTS) events.length = MAX_EVENTS;
+        }
+        state.ready = true;
+        return { infoById, changed };
+      }
+
+      async function loadFleet() {
+        try {
+          const entries = await Promise.all(
+            state.devices.map(async (id) => {
+              const res = await fetch(
+                "/api/readings?device=" +
+                  encodeURIComponent(id) +
+                  "&minutes=" +
+                  FLEET_MINUTES,
+              );
+              return [id, await res.json()];
+            }),
+          );
+          const { infoById, changed } = processFleet(entries);
+          renderFleet(infoById);
+          if (changed || !$("events").hasChildNodes()) renderEvents();
+
+          const total = state.devices.length;
+          const liveCount = entries.filter(([id]) => infoById[id].live).length;
+          if (total === 0) setConn("bad", "No devices");
+          else if (liveCount === total)
+            setConn("live", liveCount + " of " + total + " devices live");
+          else if (liveCount === 0)
+            setConn("bad", "0 of " + total + " devices live");
+          else setConn("warn", liveCount + " of " + total + " devices live");
+        } catch (e) {
+          setConn("bad", "Cannot reach the backend");
+        }
+      }
+
+      async function loadDevices() {
+        try {
+          const list = (await (await fetch("/api/devices")).json()).sort();
+          state.devices = list;
+          if (!list.includes(state.device)) {
+            state.device = list[0] || null;
+            renderSuggestions();
+          }
+        } catch (e) {
+          setConn("bad", "Cannot reach the backend");
+        }
+      }
+
+      async function tick() {
+        if (document.hidden) return;
+        await loadDevices();
+        await Promise.all([loadFleet(), refresh()]);
+      }
+
+      $("range").addEventListener("click", (e) => {
+        const b = e.target.closest("button[data-m]");
+        if (!b) return;
+        state.minutes = Number(b.dataset.m);
+        document
+          .querySelectorAll("#range button")
+          .forEach((x) => x.classList.toggle("on", x === b));
+        refresh();
+      });
+
+      // ---------- chat ----------
+      const log = $("log"),
+        input = $("input"),
+        send = $("send"),
+        sugg = $("sugg");
+
+      // Render replies with textContent only (never innerHTML): LLM output is untrusted.
+      // Only **bold** is supported, by building <strong> elements ourselves.
+      function render(el, text) {
+        text.split("**").forEach((part, i) => {
+          if (i % 2 === 1) {
+            const s = document.createElement("strong");
+            s.textContent = part;
+            el.appendChild(s);
+          } else {
+            el.appendChild(document.createTextNode(part));
+          }
+        });
+      }
+
+      function addMsg(text, cls) {
+        const el = document.createElement("div");
+        el.className = "msg " + cls;
+        if (text) render(el, text);
+        log.appendChild(el);
+        log.scrollTop = log.scrollHeight;
+        return el;
+      }
+
+      function typingDots() {
+        const wrap = document.createElement("span");
+        wrap.className = "dots";
+        wrap.setAttribute("aria-label", "Thinking");
+        for (let i = 0; i < 3; i++)
+          wrap.appendChild(document.createElement("span"));
+        return wrap;
+      }
+
+      function renderSuggestions() {
+        sugg.replaceChildren();
+        const dev = state.device;
+        const items = dev
+          ? [
+              "What is the latest reading from " + dev + "?",
+              "Was " + dev + " abnormal in the last 30 minutes?",
+              "Why does my DHT22 return NaN?",
+            ]
+          : ["Which devices are reporting?", "How accurate is the DHT22?"];
+        items.forEach((t) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = t;
+          b.onclick = () => ask(t);
+          sugg.appendChild(b);
+        });
+      }
+
+      async function ask(text) {
+        const message = (text === undefined ? input.value : text).trim();
+        if (!message || send.disabled) return;
+        addMsg(message, "user");
+        input.value = "";
+        sugg.hidden = true;
+        send.disabled = true;
+        const pending = addMsg("", "bot");
+        pending.appendChild(typingDots());
+
+        try {
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message }),
+          });
+          const data = await res.json();
+          pending.replaceChildren();
+          if (res.ok) {
+            render(pending, data.reply);
+          } else {
+            pending.className = "msg err";
+            render(pending, data.reply || "Something went wrong");
+          }
+        } catch (e) {
+          pending.replaceChildren();
+          pending.className = "msg err";
+          pending.textContent = "Cannot reach the server.";
+        } finally {
+          send.disabled = false;
+          input.focus();
+          log.scrollTop = log.scrollHeight;
+        }
+      }
+
+      send.onclick = () => ask();
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.isComposing) ask();
+      });
+
+      addMsg("Ask about sensor readings or the hardware.", "bot");
+      renderSuggestions();
+      renderEvents();
+
+      // ---------- start ----------
+      tick();
+      setInterval(tick, 5000);
     </script>
   </body>
 </html>
