@@ -115,13 +115,13 @@ These were run against the live broker:
 Stated openly, because they define the boundary of this design:
 
 - **CRL does not terminate existing sessions.** A revoked device that is already connected stays connected until it disconnects. Restarting the broker (or using Mosquitto's dynamic security plugin) is required to force it off.
-- **CRL must be regenerated** before its validity window (30 days) expires, otherwise validation can fail.
+- **CRL must be regenerated** before its validity window (30 days) expires, otherwise validation can fail. Run `scripts/gen-certs.sh crl` and restart the broker; there is no automatic refresh yet.
 - **Private keys are plain files.** There is no secure element or hardware-backed key storage, so on a real device a key could be extracted. Production hardware should use a secure element (e.g. ATECC608) or the ESP32's flash encryption and secure boot.
 - **Certificate lifetime is 365 days with no automated renewal.** Rotation is manual.
 - **The CA key lives on the same machine.** In production it would be kept offline or in an HSM.
 - **`pattern write` applies to every user**, so the `ingestor` technically gains write access to `devices/ingestor/telemetry`. Harmless here, but a stricter design would split device and service topic namespaces.
 - **Devices do not send timestamps**, so ordering reflects arrival time, not measurement time.
-- **Development-grade certificates:** the broker certificate is issued for `localhost` only.
+- **Development-grade certificates:** the broker certificate is issued for `localhost` only. Set `BROKER_CN` and `BROKER_SAN` when running the script to change that.
 
 ---
 
@@ -156,6 +156,10 @@ A single static page (`frontend/index.html`, vanilla JavaScript plus Chart.js) s
 ## AI assistant
 
 The dashboard has a chat panel backed by `POST /api/chat`. Example questions: "What is the latest temperature of sim-01?", "Was sim-01 abnormal in the last 30 minutes?", "ESP32 ใช้ ADC ตอนเปิด WiFi ได้ไหม".
+
+![The assistant reporting the latest reading of sim-01](screenshots/assistant-chat.png)
+
+The reply comes from a tool call, not from the model's memory: its values (28.94 °C and 58.68 %, received 2 seconds earlier) match the `sim-01` card and readouts, which show the same numbers rounded.
 
 ### How it works
 
@@ -192,7 +196,7 @@ The documents are in English because the default FTS5 tokenizer cannot segment T
 - **Prompt-injection resistance is not yet tested.** The design above reduces the attack surface, but a prompt-injection test (a poisoned document and hostile device IDs) has not been run. Prompt-level defenses are probabilistic, not guaranteed.
 - **No authentication on `/api/chat`.** The backend binds to `127.0.0.1` only. Exposing it to a network would let anyone consume the LLM quota; authentication and rate limiting would be required first.
 - **No conversation memory.** Each question is answered independently.
-- **Free-tier quota.** A question can use 2 to 3 API calls, so the Gemini free tier can return rate-limit errors (reported to the user as HTTP 429 with a retry message).
+- **Free-tier quota.** A question can use 2 to 3 API calls, so the Gemini free tier can return rate-limit errors (reported to the user as HTTP 429 with a retry message). Quotas apply per Google Cloud project and per model, not per API key, so creating a new key in the same project does not reset them. Check current usage at <https://aistudio.google.com/rate-limit>: per-minute limits clear after about a minute, while a daily limit requires waiting for the daily reset or switching to another model.
 - **Free-tier data handling.** Data sent to the free tier of the Gemini API may be used by the provider to improve its products. Only simulated data is sent in this project; do not send sensitive data.
 - **Documentation accuracy.** The hardware documents are author-written summaries of manufacturer datasheets. The assistant is only as accurate as those summaries.
 - **Keyword retrieval only.** FTS5 matches words, not meaning, so a question phrased with unrelated vocabulary may miss a relevant chunk.
@@ -217,6 +221,8 @@ The documents are in English because the default FTS5 tokenizer cannot segment T
 ├── frontend/
 │   └── index.html        Dashboard + chat panel (embedded into the backend binary at build time)
 ├── screenshots/          Images used in this README
+├── scripts/
+│   └── gen-certs.sh      Certificate authority, device certificates, revocation (CRL)
 ├── simulator/
 │   └── esp32.py          Device simulator
 ├── mosquitto/
@@ -235,7 +241,7 @@ The documents are in English because the default FTS5 tokenizer cannot segment T
 - [Mosquitto 2.x](https://mosquitto.org/download/)
 - [Rust toolchain](https://rustup.rs) (`cargo`)
 - Python 3.9+
-- OpenSSL (on Windows, use Git Bash, which bundles it)
+- OpenSSL 1.1.1 or newer (on Windows, use Git Bash, which bundles it; macOS's built-in LibreSSL has not been tested, so install OpenSSL with Homebrew)
 - A browser with internet access on first load (Chart.js comes from a CDN)
 
 ### 1. Python environment
@@ -248,40 +254,20 @@ python -m pip install "paho-mqtt>=2"
 
 ### 2. Generate certificates
 
-Run in `certs/`. On Windows Git Bash, write `//CN=...` instead of `/CN=...` to avoid path conversion.
-
 ```bash
-mkdir -p certs && cd certs
-
-# Certificate authority
-openssl genrsa -out ca.key 4096
-openssl req -x509 -new -key ca.key -sha256 -days 3650 -subj "/CN=IoT-Dev-CA" -out ca.crt
-
-# Broker certificate (SAN required for hostname verification)
-openssl genrsa -out broker.key 2048
-openssl req -new -key broker.key -subj "/CN=localhost" -out broker.csr
-cat > broker.ext <<EOF
-subjectAltName = DNS:localhost, IP:127.0.0.1
-extendedKeyUsage = serverAuth
-EOF
-openssl x509 -req -in broker.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
-  -out broker.crt -days 365 -sha256 -extfile broker.ext
-
-# Client certificates (devices and backend)
-issue_client() {
-  NAME=$1
-  openssl genrsa -out $NAME.key 2048
-  openssl req -new -key $NAME.key -subj "/CN=$NAME" -out $NAME.csr
-  echo "extendedKeyUsage = clientAuth" > $NAME.ext
-  openssl x509 -req -in $NAME.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
-    -out $NAME.crt -days 365 -sha256 -extfile $NAME.ext
-}
-issue_client sim-01
-issue_client sim-02
-issue_client ingestor
+bash scripts/gen-certs.sh
 ```
 
-Check: `openssl verify -CAfile ca.crt sim-01.crt sim-02.crt ingestor.crt` should print `OK` for each.
+This creates, in `certs/` (set `CERT_DIR` to change it):
+
+- a private certificate authority (`ca.key`, `ca.crt`)
+- the broker certificate `broker.crt`, valid for `localhost` and `127.0.0.1`
+- client certificates for `sim-01`, `sim-02` and `ingestor`, where the CN is the device identity
+- an empty certificate revocation list, `crl.pem`
+
+It finishes by printing the absolute paths to use in the Mosquitto config. Running it again is safe: existing files are never overwritten. Certificates are issued with `openssl ca`, so each one is recorded in the CA database (`certs/index.txt`) and can be revoked later.
+
+Other commands: `issue NAME...` (add devices), `revoke NAME`, `crl` (regenerate the list), `status` (show active and revoked certificates), `help`. On Windows run it from Git Bash; the script disables Git Bash's path rewriting itself, so no `//CN=` workaround is needed.
 
 ### 3. Configure and start the broker
 
@@ -294,6 +280,7 @@ protocol mqtt
 cafile /ABSOLUTE/PATH/certs/ca.crt
 certfile /ABSOLUTE/PATH/certs/broker.crt
 keyfile /ABSOLUTE/PATH/certs/broker.key
+crlfile /ABSOLUTE/PATH/certs/crl.pem
 
 tls_version tlsv1.2
 require_certificate true
@@ -302,6 +289,8 @@ use_identity_as_username true
 allow_anonymous false
 acl_file /ABSOLUTE/PATH/mosquitto/acl.conf
 ```
+
+`crlfile` can stay in the config from the start, because the script always creates `crl.pem`. Mosquitto refuses to start if the file it points to is missing.
 
 Start it and leave it running:
 
@@ -331,7 +320,7 @@ python simulator/esp32.py sim-02
 
 Open <http://localhost:8000>. Each device appears as a card within a few seconds. Run each device name in only one terminal: MQTT client IDs must be unique, and a second process with the same name will keep disconnecting the first.
 
-**Adding a device** means provisioning an identity for it. Issue a certificate whose CN is the new name (same commands as `sim-01` in step 2, for example `issue_client sim-03`), then run `python simulator/esp32.py sim-03`. No ACL or broker change is needed because the ACL uses the CN as a pattern.
+**Adding a device** means provisioning an identity for it. Issue a certificate whose CN is the new name with `bash scripts/gen-certs.sh issue sim-03`, then run `python simulator/esp32.py sim-03`. No ACL or broker change is needed because the ACL uses the CN as a pattern.
 
 **If a device never shows up,** check the broker log for `New client connected ... as <name>`. The simulator keeps printing readings even when its connection is refused (the MQTT client retries silently in the background), so printed output does not prove delivery. A revoked certificate, a missing certificate file, or a mistyped name are the usual causes.
 
@@ -361,43 +350,17 @@ Pick a current text model from the Flash family. Model names and free-tier avail
 
 ### 7. Try revoking a device
 
-Set up a CA database in `certs/`:
-
 ```bash
-touch index.txt
-echo 1000 > crlnumber
-cat > ca.cnf <<'EOF'
-[ca]
-default_ca = CA_default
-
-[CA_default]
-database = index.txt
-crlnumber = crlnumber
-default_md = sha256
-default_crl_days = 30
-EOF
+bash scripts/gen-certs.sh revoke sim-02
+bash scripts/gen-certs.sh status       # sim-02 now shows REVOKED
 ```
 
-Because the certificates above were signed with `openssl x509 -req`, they are not recorded in `index.txt`. Register the one you want to revoke (here `sim-02`) first:
+The script revokes the certificate, regenerates `crl.pem`, and confirms with `openssl verify -crl_check` that OpenSSL reports it as revoked. **Restart the broker** so it reloads the list. `sim-02` is then refused, while `sim-01` and the backend keep working.
 
-```bash
-SERIAL=$(openssl x509 -in sim-02.crt -noout -serial | cut -d= -f2)
-ENDDATE=$(openssl x509 -in sim-02.crt -noout -enddate | cut -d= -f2)
-EXPIRY=$(date -u -d "$ENDDATE" +%y%m%d%H%M%SZ)
-printf "V\t%s\t\t%s\tunknown\t/CN=sim-02\n" "$EXPIRY" "$SERIAL" > index.txt
-```
+Notes:
 
-Revoke and generate the CRL:
-
-```bash
-openssl ca -config ca.cnf -cert ca.crt -keyfile ca.key -revoke sim-02.crt
-openssl ca -config ca.cnf -cert ca.crt -keyfile ca.key -gencrl -out crl.pem
-openssl verify -crl_check -CAfile ca.crt -CRLfile crl.pem sim-02.crt   # expect: certificate revoked
-```
-
-Add `crlfile /ABSOLUTE/PATH/certs/crl.pem` to `mosquitto.conf` and **restart the broker**. `sim-02` is now refused, while `sim-01` and the backend keep working.
-
-To revoke another device later, append its line to `index.txt` with `>>` instead of overwriting the file, run the revoke and `-gencrl` commands again, and restart the broker.
+- A revoked certificate stays revoked. To bring the name back, delete its `.crt` and `.key` files and run `issue` again; the new certificate gets a new serial number.
+- The list expires after 30 days (`CRL_DAYS`). Run `bash scripts/gen-certs.sh crl` and restart the broker before then.
 
 ---
 
@@ -434,34 +397,15 @@ Note: `/api/devices` reads from stored history, so a revoked device still appear
 
 ## Security notes for contributors
 
-- **Never commit private keys.** `.gitignore` excludes `certs/*.key`, the serial files, and the CA database files.
+- **Never commit private keys.** `.gitignore` should exclude the whole `certs/` directory (keys, serial files, and the CA database).
 - The repository does not include working certificates. Generate your own with the steps above.
 - Treat device-originated data as untrusted input, especially once it is passed to any language model.
 - **Never commit the LLM API key.** Keep it in an environment variable (or an untracked `.env` file listed in `.gitignore`). If a key is ever committed, revoke it and create a new one.
 
 ---
 
-## Roadmap
+License
 
-- [x] **Phase 1:** Simulated sensors → MQTT → Rust ingestor → SQLite → dashboard
-- [x] **Phase 2:** mTLS authentication, per-device ACL authorization, CRL revocation
-- [x] **Phase 3:** AI assistant
-  - [x] `/api/chat` endpoint backed by an LLM API (kept behind a single module so the provider can be swapped)
-  - [x] Read-only tools for latest and historical sensor values
-  - [x] Lightweight RAG over sensor documentation (SQLite FTS5)
-  - [x] Chat panel in the dashboard
-  - [x] Hardening by design: read-only tools, validated tool arguments, sanitized search queries, no HTML rendering of replies
-  - [ ] Prompt-injection test: poisoned document and hostile device ID, with results recorded
-- [x] Dashboard: device overview cards, anomaly markers, and an event list for outages and anomalies
-- [ ] Device identity panel in the dashboard (certificate CN, expiry, revoked status; read-only)
-- [ ] Persist events on the backend so they survive a page reload
-- [ ] Authentication and rate limiting on `/api/chat` (required before exposing beyond localhost)
-- [ ] Conversation memory for the assistant
-- [ ] Scripted provisioning (`scripts/gen-certs.sh`) and automated CRL refresh
-- [ ] Real ESP32 firmware using the same topic and payload contract
+Copyright (c) 2026 PATTRAPORN RATTANAKANTONG. All rights reserved.
 
----
-
-## License
-
-Choose a license (for example MIT) and add a `LICENSE` file.
+This repository is published for viewing and evaluation only, as a portfolio project. It is not open-source software and is not licensed for use, modification or redistribution. See LICENSE. Third-party dependencies keep their own licenses.
