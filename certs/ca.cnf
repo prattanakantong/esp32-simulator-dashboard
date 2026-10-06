@@ -1,8 +1,0 @@
-[ca]
-default_ca = CA_default
-
-[CA_default]
-database = index.txt
-crlnumber = crlnumber
-default_md = sha256
-default_crl_days = 30
